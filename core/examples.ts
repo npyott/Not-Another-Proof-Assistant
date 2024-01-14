@@ -68,7 +68,11 @@ const h1 = Symbol("h1");
 
 console.log(
     typeCheck(
-        apply(OrFormationRight, Q, P),
+        apply(
+            apply(ApplyOrLeft, P, Q, Or(Q, P)),
+            h1,
+            apply(OrFormationRight, Q, P)
+        ),
         PropDeclarations.concat([
             {
                 name: P,

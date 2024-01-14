@@ -102,9 +102,11 @@ export const betaReduce = (
 
 export const expressionCongruent = (
     expression1: Expression,
-    expression2: Expression
+    expression2: Expression,
+    parentID = ""
 ): boolean => {
-    console.log("Comparing", expression1, expression2);
+    const id = crypto.randomUUID();
+    console.log("Comparing", parentID, id, expression1, expression2);
     if (isSymbolExpression(expression1) && isSymbolExpression(expression2)) {
         return expression1 === expression2;
     }
@@ -120,7 +122,7 @@ export const expressionCongruent = (
         if (
             !expression1.variables.every(({ type: type1 }, index) => {
                 const type2 = expression2.variables[index].type;
-                return expressionCongruent(type1, type2);
+                return expressionCongruent(type1, type2, id);
             })
         ) {
             return false;
@@ -139,7 +141,7 @@ export const expressionCongruent = (
             expression2.body
         );
 
-        return expressionCongruent(expression1.body, newBody2);
+        return expressionCongruent(expression1.body, newBody2, id);
     }
 
     if (
@@ -152,11 +154,15 @@ export const expressionCongruent = (
         }
 
         return (
-            expressionCongruent(expression1.function, expression2.function) &&
+            expressionCongruent(
+                expression1.function,
+                expression2.function,
+                id
+            ) &&
             expression1.arguments.every((arg1, index) => {
                 const arg2 = expression2.arguments[index];
 
-                return expressionCongruent(arg1, arg2);
+                return expressionCongruent(arg1, arg2, id);
             })
         );
     }
@@ -167,9 +173,11 @@ export const expressionCongruent = (
 // TODO: Use sub-errors to make descriptive chain
 export const typeCheck = (
     expression: Expression,
-    declarations: Declaration[]
+    declarations: Declaration[],
+    parentID = ""
 ): Expression => {
-    console.log("Type checking", expression);
+    const id = crypto.randomUUID();
+    console.log("Type checking", parentID, id, expression);
     if (isSymbolExpression(expression)) {
         const declaration = declarations.find(
             ({ name }) => name === expression
@@ -202,11 +210,11 @@ export const typeCheck = (
         return {
             expressionType: "abstraction",
             variables: expression.variables.slice(),
-            body: typeCheck(expression.body, newDeclarations),
+            body: typeCheck(expression.body, newDeclarations, id),
         } as AbstractionExpression;
     }
 
-    const functionType = typeCheck(expression.function, declarations);
+    const functionType = typeCheck(expression.function, declarations, id);
 
     if (!isAbstractionExpression(functionType)) {
         throw new Error("Cannot apply non-function type");
@@ -215,9 +223,9 @@ export const typeCheck = (
     for (const [index, declaration] of functionType.variables.entries()) {
         const argument = expression.arguments[index];
 
-        const argType = typeCheck(argument, declarations);
+        const argType = typeCheck(argument, declarations, id);
 
-        if (!expressionCongruent(argType, declaration.type)) {
+        if (!expressionCongruent(argType, declaration.type, id)) {
             throw new Error(`Type mismatch on application.`);
         }
     }
