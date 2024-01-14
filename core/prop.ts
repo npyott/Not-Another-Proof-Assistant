@@ -1,4 +1,10 @@
-import { independentFunctionType, makeAbstraction } from "./utilities";
+import {
+    Expression,
+    ApplicationExpression,
+    AbstractionExpression,
+    Declaration,
+} from "./types.ts";
+import { independentFunctionType, makeAbstraction } from "./utilities.ts";
 
 export const PropUniverse = Symbol("PropUniverse");
 export const Prop = Symbol("Prop");

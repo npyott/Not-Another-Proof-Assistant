@@ -1,3 +1,9 @@
+import {
+    AbstractionExpression,
+    ApplicationExpression,
+    Expression,
+} from "./types.ts";
+
 const makeAbstractionSingle = (
     [name, type]: [symbol, Expression],
     body: (symbol: symbol) => Expression

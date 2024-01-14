@@ -1,17 +1,17 @@
-type Expression = symbol | AbstractionExpression | ApplicationExpression;
+export type Expression = symbol | AbstractionExpression | ApplicationExpression;
 
-type Declaration = {
+export type Declaration = {
     name: symbol;
     type: Expression;
 };
 
-type AbstractionExpression = {
+export type AbstractionExpression = {
     expressionType: "abstraction";
     variables: Declaration[];
     body: Expression;
 };
 
-type ApplicationExpression = {
+export type ApplicationExpression = {
     expressionType: "application";
     function: Expression;
     arguments: Expression[];
@@ -32,7 +32,7 @@ const isApplicationExpression = (
     !isSymbolExpression(expression) &&
     expression.expressionType === "application";
 
-const alphaReduce = (
+export const alphaReduce = (
     expression: Expression,
     oldSymbol: symbol,
     newSymbol: symbol
@@ -61,7 +61,7 @@ const alphaReduce = (
     };
 };
 
-const betaReduce = (
+export const betaReduce = (
     expression: Expression,
     name: symbol,
     value: Expression
@@ -100,10 +100,11 @@ const betaReduce = (
     };
 };
 
-const expressionCongruent = (
+export const expressionCongruent = (
     expression1: Expression,
     expression2: Expression
 ): boolean => {
+    console.log("Comparing", expression1, expression2);
     if (isSymbolExpression(expression1) && isSymbolExpression(expression2)) {
         return expression1 === expression2;
     }
@@ -146,6 +147,7 @@ const expressionCongruent = (
         isApplicationExpression(expression2)
     ) {
         if (expression1.arguments.length !== expression2.arguments.length) {
+            console.log("Length mismatch.");
             return false;
         }
 
@@ -163,10 +165,11 @@ const expressionCongruent = (
 };
 
 // TODO: Use sub-errors to make descriptive chain
-const typeCheck = (
+export const typeCheck = (
     expression: Expression,
     declarations: Declaration[]
 ): Expression => {
+    console.log("Type checking", expression);
     if (isSymbolExpression(expression)) {
         const declaration = declarations.find(
             ({ name }) => name === expression
@@ -212,13 +215,10 @@ const typeCheck = (
     for (const [index, declaration] of functionType.variables.entries()) {
         const argument = expression.arguments[index];
 
-        if (
-            !expressionCongruent(
-                typeCheck(argument, declarations),
-                declaration.type
-            )
-        ) {
-            throw new Error("Type mismatch on application.");
+        const argType = typeCheck(argument, declarations);
+
+        if (!expressionCongruent(argType, declaration.type)) {
+            throw new Error(`Type mismatch on application.`);
         }
     }
 
