@@ -1,17 +1,17 @@
-type Expression = symbol | AbstractionExpression | ApplicationExpression;
+export type Expression = symbol | AbstractionExpression | ApplicationExpression;
 
-type Declaration = {
+export type Declaration = {
     name: symbol;
     type: Expression;
 };
 
-type AbstractionExpression = {
+export type AbstractionExpression = {
     expressionType: "abstraction";
     variables: Declaration[];
     body: Expression;
 };
 
-type ApplicationExpression = {
+export type ApplicationExpression = {
     expressionType: "application";
     function: Expression;
     arguments: Expression[];
@@ -32,75 +32,82 @@ const isApplicationExpression = (
     !isSymbolExpression(expression) &&
     expression.expressionType === "application";
 
-const alphaReduce = (
+export const alphaReduce = (
     expression: Expression,
-    oldSymbol: symbol,
-    newSymbol: symbol
+    ...reductions: { name: symbol; rename: symbol }[]
 ): Expression => {
+    const alphaReduceFixed = (expression: Expression) =>
+        alphaReduce(expression, ...reductions);
+
     if (isSymbolExpression(expression)) {
-        return expression === oldSymbol ? newSymbol : expression;
+        return (
+            reductions.find(({ name: oldSymbol }) => oldSymbol === expression)
+                ?.rename ?? expression
+        );
     }
 
     if (isAbstractionExpression(expression)) {
         return {
             expressionType: "abstraction",
             variables: expression.variables.map(({ name, type }) => ({
-                name: alphaReduce(name, oldSymbol, newSymbol) as symbol,
-                type: alphaReduce(type, oldSymbol, newSymbol),
+                name: alphaReduceFixed(name) as symbol,
+                type: alphaReduceFixed(type),
             })),
-            body: alphaReduce(expression.body, oldSymbol, newSymbol),
+            body: alphaReduceFixed(expression.body),
         };
     }
 
     return {
         expressionType: "application",
-        function: alphaReduce(expression.function, oldSymbol, newSymbol),
-        arguments: expression.arguments.map((arg) =>
-            alphaReduce(arg, oldSymbol, newSymbol)
-        ),
+        function: alphaReduceFixed(expression.function),
+        arguments: expression.arguments.map(alphaReduceFixed),
     };
 };
 
-const betaReduce = (
+export const betaReduce = (
     expression: Expression,
-    name: symbol,
-    value: Expression
+    ...reductions: { name: symbol; value: Expression }[]
 ): Expression => {
+    const fixedBetaReduce = (expression: Expression) =>
+        betaReduce(expression, ...reductions);
+
     if (isSymbolExpression(expression)) {
-        return expression === name ? value : expression;
+        return (
+            reductions.find(({ name }) => name === expression)?.value ??
+            expression
+        );
     }
 
     if (isAbstractionExpression(expression)) {
+        const reductionNames = new Set(reductions.map(({ name }) => name));
+
         if (
             expression.variables.length === 0 ||
-            (expression.variables.length === 1 &&
-                expression.variables[0].name === name)
+            expression.variables.every(({ name }) => reductionNames.has(name))
         ) {
-            return betaReduce(expression.body, name, value);
+            return fixedBetaReduce(expression.body);
         }
 
         return {
             expressionType: "abstraction",
             variables: expression.variables
-                .filter((variable) => variable.name !== name)
+                .filter(({ name }) => !reductionNames.has(name))
                 .map(({ name, type }) => ({
                     name,
-                    type: betaReduce(type, name, value),
+                    type: fixedBetaReduce(type),
                 })),
-            body: betaReduce(expression.body, name, expression),
+            body: fixedBetaReduce(expression.body),
         };
     }
 
     return {
         expressionType: "application",
-        function: betaReduce(expression.function, name, value),
-        arguments: expression.arguments.map((arg) =>
-            betaReduce(arg, name, value)
-        ),
+        function: fixedBetaReduce(expression.function),
+        arguments: expression.arguments.map(fixedBetaReduce),
     };
 };
 
-const expressionCongruent = (
+export const expressionCongruent = (
     expression1: Expression,
     expression2: Expression
 ): boolean => {
@@ -125,20 +132,14 @@ const expressionCongruent = (
             return false;
         }
 
-        const renames = expression1.variables.map(
-            ({ name: newSymbol }, index) => ({
-                oldSymbol: expression2.variables[index].name,
-                newSymbol,
-            })
-        );
+        const reductions = expression2.variables.map(({ name }, index) => ({
+            name,
+            rename: expression1.variables[index].name,
+        }));
 
-        const newBody2 = renames.reduce(
-            (body, { oldSymbol, newSymbol }): Expression =>
-                alphaReduce(body, oldSymbol, newSymbol),
-            expression2.body
-        );
+        const reducedBody2 = alphaReduce(expression2.body, ...reductions);
 
-        return expressionCongruent(expression1.body, newBody2);
+        return expressionCongruent(expression1.body, reducedBody2);
     }
 
     if (
@@ -163,7 +164,7 @@ const expressionCongruent = (
 };
 
 // TODO: Use sub-errors to make descriptive chain
-const typeCheck = (
+export const typeCheck = (
     expression: Expression,
     declarations: Declaration[]
 ): Expression => {
@@ -209,27 +210,18 @@ const typeCheck = (
         throw new Error("Cannot apply non-function type");
     }
 
+    const reductions: { name: symbol; value: Expression }[] = [];
     for (const [index, declaration] of functionType.variables.entries()) {
         const argument = expression.arguments[index];
 
-        if (
-            !expressionCongruent(
-                typeCheck(argument, declarations),
-                declaration.type
-            )
-        ) {
-            throw new Error("Type mismatch on application.");
+        const argType = typeCheck(argument, declarations);
+
+        if (!expressionCongruent(argType, declaration.type)) {
+            throw new Error(`Type mismatch on application.`);
         }
+
+        reductions.push({ name: declaration.name, value: argument });
     }
 
-    const betaReducedExpression = expression.arguments.reduce(
-        (functionExpression, argument, index) => {
-            const declaration = functionType.variables[index];
-
-            return betaReduce(functionExpression, declaration.name, argument);
-        },
-        functionType
-    );
-
-    return betaReducedExpression;
+    return betaReduce(functionType, ...reductions);
 };

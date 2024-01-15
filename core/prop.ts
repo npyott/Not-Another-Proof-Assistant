@@ -1,4 +1,14 @@
-import { independentFunctionType, makeAbstraction } from "./utilities";
+import {
+    Expression,
+    ApplicationExpression,
+    AbstractionExpression,
+    betaReduce,
+} from "./types.ts";
+import {
+    apply,
+    independentFunctionType,
+    makeAbstraction,
+} from "./utilities.ts";
 
 export const PropUniverse = Symbol("PropUniverse");
 export const Prop = Symbol("Prop");
@@ -63,7 +73,7 @@ export const implication = (
     conclusion: Expression
 ): AbstractionExpression => independentFunctionType(premises, conclusion);
 
-export const PropDeclarations: Declaration[] = [
+const PropSymbolicDeclarations = [
     {
         name: Prop,
         type: PropUniverse,
@@ -73,12 +83,23 @@ export const PropDeclarations: Declaration[] = [
         type: Prop,
     },
     {
-        name: FalseImpliesAll,
-        type: forAllPropositions((P) => implication(False, P)),
-    },
-    {
         name: NotSymbol,
         type: independentFunctionType(Prop, Prop),
+    },
+    {
+        name: AndSymbol,
+        type: independentFunctionType([Prop, Prop], Prop),
+    },
+    {
+        name: OrSymbol,
+        type: independentFunctionType([Prop, Prop], Prop),
+    },
+] as const;
+
+const PropAxiomaticDeclarations = [
+    {
+        name: FalseImpliesAll,
+        type: forAllPropositions((P) => implication(False, P)),
     },
     {
         name: NotImplication,
@@ -93,10 +114,6 @@ export const PropDeclarations: Declaration[] = [
         ),
     },
     {
-        name: AndSymbol,
-        type: independentFunctionType([Prop, Prop], Prop),
-    },
-    {
         name: AndLeft,
         type: forAllPropositions((P, Q) => implication(And(P, Q), P)),
     },
@@ -107,10 +124,6 @@ export const PropDeclarations: Declaration[] = [
     {
         name: AndFormation,
         type: forAllPropositions((P, Q) => implication([P, Q], And(P, Q))),
-    },
-    {
-        name: OrSymbol,
-        type: independentFunctionType([Prop, Prop], Prop),
     },
     {
         name: ApplyOrLeft,
@@ -140,4 +153,40 @@ export const PropDeclarations: Declaration[] = [
         name: ExcludedMiddle,
         type: forAllPropositions((P) => Or(P, Not(P))),
     },
+] as const;
+
+export const PropDeclarations = [
+    ...PropSymbolicDeclarations,
+    ...PropAxiomaticDeclarations,
 ];
+
+type PropAxiom = (typeof PropAxiomaticDeclarations)[number]["name"];
+
+export const usePropAxioms = (
+    axioms: { name: PropAxiom; reductions: Expression[] }[],
+    body: (...axioms: symbol[]) => Expression
+) =>
+    apply(
+        makeAbstraction(
+            axioms.map(
+                ({ name: axiomName, reductions }, index) =>
+                    [
+                        Symbol(`Axiom ${index + 1}`),
+                        ((axiomType) =>
+                            betaReduce(
+                                axiomType,
+                                ...reductions.map((value, index) => ({
+                                    name: axiomType.variables[index].name,
+                                    value,
+                                }))
+                            ))(
+                            PropAxiomaticDeclarations.find(
+                                ({ name }) => name === axiomName
+                            )!.type
+                        ),
+                    ] as [symbol, Expression]
+            ),
+            body
+        ),
+        ...axioms.map(({ name, reductions }) => apply(name, ...reductions))
+    );
