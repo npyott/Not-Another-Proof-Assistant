@@ -82,17 +82,3 @@ console.log(
         PropDeclarations
     )
 );
-
-// apply(
-//     ConcludeFromOr,
-//     apply(
-//         apply(ApplyOrLeft, P, Q, Or(Q, P)),
-//         h1,
-//         apply(OrFormationRight, Q, P)
-//     ),
-//     apply(
-//         apply(ApplyOrRight, P, Q, Or(Q, P)),
-//         h1,
-//         apply(OrFormationLeft, Q, P)
-//     )
-// )
