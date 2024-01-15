@@ -12,6 +12,7 @@ import {
     PropDeclarations,
     forAllPropositions,
     implication,
+    usePropAxioms,
 } from "./prop.ts";
 
 /**
@@ -25,67 +26,73 @@ import {
  * This finally implies Q or P by h5.
  */
 
-// console.log(
-//     typeCheck(
-//         {
-//             expressionType: "application",
-//             function: makeAbstraction(
-//                 [
-//                     Symbol("Theorem 1"),
-//                     forAllPropositions((P, Q) =>
-//                         implication(Or(P, Q), Or(Q, P))
-//                     ),
-//                 ],
-//                 (_thm1) => Prop
-//             ),
-//             arguments: [
-//                 forAllPropositions((P, Q) =>
-//                     makeAbstraction([Symbol("h1"), Or(P, Q)], (h1) =>
-//                         apply(
-//                             ConcludeFromOr,
-//                             apply(
-//                                 apply(ApplyOrLeft, P, Q, Or(Q, P)),
-//                                 h1,
-//                                 apply(OrFormationRight, Q, P)
-//                             ),
-//                             apply(
-//                                 apply(ApplyOrRight, P, Q, Or(Q, P)),
-//                                 h1,
-//                                 apply(OrFormationLeft, Q, P)
-//                             )
-//                         )
-//                     )
-//                 ),
-//             ],
-//         },
-//         PropDeclarations
-//     )
-// );
-
-const P = Symbol("P");
-const Q = Symbol("Q");
-const h1 = Symbol("h1");
-
 console.log(
     typeCheck(
-        apply(
-            apply(ApplyOrLeft, P, Q, Or(Q, P)),
-            h1,
-            apply(OrFormationRight, Q, P)
-        ),
-        PropDeclarations.concat([
-            {
-                name: P,
-                type: Prop,
-            },
-            {
-                name: Q,
-                type: Prop,
-            },
-            {
-                name: h1,
-                type: Or(P, Q),
-            },
-        ])
+        {
+            expressionType: "application",
+            function: makeAbstraction(
+                [
+                    Symbol("Theorem 1"),
+                    forAllPropositions((P, Q) =>
+                        implication(Or(P, Q), Or(Q, P))
+                    ),
+                ],
+                (_thm1) => Prop
+            ),
+            arguments: [
+                forAllPropositions((P, Q) =>
+                    makeAbstraction([Symbol("h1"), Or(P, Q)], (h1) =>
+                        usePropAxioms(
+                            [
+                                {
+                                    name: OrFormationRight,
+                                    reductions: [Q, P],
+                                },
+                                {
+                                    name: OrFormationLeft,
+                                    reductions: [Q, P],
+                                },
+                                {
+                                    name: ApplyOrLeft,
+                                    reductions: [P, Q, Or(Q, P)],
+                                },
+                                {
+                                    name: ApplyOrRight,
+                                    reductions: [Or(Q, P), Q, Or(Q, P)],
+                                },
+                                {
+                                    name: ConcludeFromOr,
+                                    reductions: [Or(Q, P)],
+                                },
+                            ],
+                            /**
+                             * @param h2 P => Or(Q, P)
+                             * @param h3 Q => Or(Q, P)
+                             * @param h4 (Or(P, Q), (P => Or(Q, P))) => Or(Or(Q, P), Q)
+                             * @param h5 (Or(Or(Q, P), Q), (Q => Or(Q, P))) => Or(Or(Q, P), Or(Q, P))
+                             * @param h6 Or(Or(Q, P), Or(Q, P)) => Or(Q, P)
+                             */
+                            (h2, h3, h4, h5, h6) =>
+                                apply(h6, apply(h5, apply(h4, h1, h2), h3))
+                        )
+                    )
+                ),
+            ],
+        },
+        PropDeclarations
     )
 );
+
+// apply(
+//     ConcludeFromOr,
+//     apply(
+//         apply(ApplyOrLeft, P, Q, Or(Q, P)),
+//         h1,
+//         apply(OrFormationRight, Q, P)
+//     ),
+//     apply(
+//         apply(ApplyOrRight, P, Q, Or(Q, P)),
+//         h1,
+//         apply(OrFormationLeft, Q, P)
+//     )
+// )

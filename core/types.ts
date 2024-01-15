@@ -34,79 +34,83 @@ const isApplicationExpression = (
 
 export const alphaReduce = (
     expression: Expression,
-    oldSymbol: symbol,
-    newSymbol: symbol
+    ...reductions: { name: symbol; rename: symbol }[]
 ): Expression => {
+    const alphaReduceFixed = (expression: Expression) =>
+        alphaReduce(expression, ...reductions);
+
     if (isSymbolExpression(expression)) {
-        return expression === oldSymbol ? newSymbol : expression;
+        return (
+            reductions.find(({ name: oldSymbol }) => oldSymbol === expression)
+                ?.rename ?? expression
+        );
     }
 
     if (isAbstractionExpression(expression)) {
         return {
             expressionType: "abstraction",
             variables: expression.variables.map(({ name, type }) => ({
-                name: alphaReduce(name, oldSymbol, newSymbol) as symbol,
-                type: alphaReduce(type, oldSymbol, newSymbol),
+                name: alphaReduceFixed(name) as symbol,
+                type: alphaReduceFixed(type),
             })),
-            body: alphaReduce(expression.body, oldSymbol, newSymbol),
+            body: alphaReduceFixed(expression.body),
         };
     }
 
     return {
         expressionType: "application",
-        function: alphaReduce(expression.function, oldSymbol, newSymbol),
-        arguments: expression.arguments.map((arg) =>
-            alphaReduce(arg, oldSymbol, newSymbol)
-        ),
+        function: alphaReduceFixed(expression.function),
+        arguments: expression.arguments.map(alphaReduceFixed),
     };
 };
 
 export const betaReduce = (
     expression: Expression,
-    name: symbol,
-    value: Expression
+    ...reductions: { name: symbol; value: Expression }[]
 ): Expression => {
+    const fixedBetaReduce = (expression: Expression) =>
+        betaReduce(expression, ...reductions);
+
     if (isSymbolExpression(expression)) {
-        return expression === name ? value : expression;
+        return (
+            reductions.find(({ name }) => name === expression)?.value ??
+            expression
+        );
     }
 
     if (isAbstractionExpression(expression)) {
+        const reductionNames = new Set(reductions.map(({ name }) => name));
+
         if (
             expression.variables.length === 0 ||
-            (expression.variables.length === 1 &&
-                expression.variables[0].name === name)
+            expression.variables.every(({ name }) => reductionNames.has(name))
         ) {
-            return betaReduce(expression.body, name, value);
+            return fixedBetaReduce(expression.body);
         }
 
         return {
             expressionType: "abstraction",
             variables: expression.variables
-                .filter((variable) => variable.name !== name)
+                .filter(({ name }) => !reductionNames.has(name))
                 .map(({ name, type }) => ({
                     name,
-                    type: betaReduce(type, name, value),
+                    type: fixedBetaReduce(type),
                 })),
-            body: betaReduce(expression.body, name, expression),
+            body: fixedBetaReduce(expression.body),
         };
     }
 
     return {
         expressionType: "application",
-        function: betaReduce(expression.function, name, value),
-        arguments: expression.arguments.map((arg) =>
-            betaReduce(arg, name, value)
-        ),
+        function: fixedBetaReduce(expression.function),
+        arguments: expression.arguments.map(fixedBetaReduce),
     };
 };
 
 export const expressionCongruent = (
     expression1: Expression,
-    expression2: Expression,
-    parentID = ""
+    expression2: Expression
 ): boolean => {
-    const id = crypto.randomUUID();
-    console.log("Comparing", parentID, id, expression1, expression2);
     if (isSymbolExpression(expression1) && isSymbolExpression(expression2)) {
         return expression1 === expression2;
     }
@@ -122,26 +126,20 @@ export const expressionCongruent = (
         if (
             !expression1.variables.every(({ type: type1 }, index) => {
                 const type2 = expression2.variables[index].type;
-                return expressionCongruent(type1, type2, id);
+                return expressionCongruent(type1, type2);
             })
         ) {
             return false;
         }
 
-        const renames = expression1.variables.map(
-            ({ name: newSymbol }, index) => ({
-                oldSymbol: expression2.variables[index].name,
-                newSymbol,
-            })
-        );
+        const reductions = expression2.variables.map(({ name }, index) => ({
+            name,
+            rename: expression1.variables[index].name,
+        }));
 
-        const newBody2 = renames.reduce(
-            (body, { oldSymbol, newSymbol }): Expression =>
-                alphaReduce(body, oldSymbol, newSymbol),
-            expression2.body
-        );
+        const reducedBody2 = alphaReduce(expression2.body, ...reductions);
 
-        return expressionCongruent(expression1.body, newBody2, id);
+        return expressionCongruent(expression1.body, reducedBody2);
     }
 
     if (
@@ -149,20 +147,15 @@ export const expressionCongruent = (
         isApplicationExpression(expression2)
     ) {
         if (expression1.arguments.length !== expression2.arguments.length) {
-            console.log("Length mismatch.");
             return false;
         }
 
         return (
-            expressionCongruent(
-                expression1.function,
-                expression2.function,
-                id
-            ) &&
+            expressionCongruent(expression1.function, expression2.function) &&
             expression1.arguments.every((arg1, index) => {
                 const arg2 = expression2.arguments[index];
 
-                return expressionCongruent(arg1, arg2, id);
+                return expressionCongruent(arg1, arg2);
             })
         );
     }
@@ -173,11 +166,8 @@ export const expressionCongruent = (
 // TODO: Use sub-errors to make descriptive chain
 export const typeCheck = (
     expression: Expression,
-    declarations: Declaration[],
-    parentID = ""
+    declarations: Declaration[]
 ): Expression => {
-    const id = crypto.randomUUID();
-    console.log("Type checking", parentID, id, expression);
     if (isSymbolExpression(expression)) {
         const declaration = declarations.find(
             ({ name }) => name === expression
@@ -210,34 +200,28 @@ export const typeCheck = (
         return {
             expressionType: "abstraction",
             variables: expression.variables.slice(),
-            body: typeCheck(expression.body, newDeclarations, id),
+            body: typeCheck(expression.body, newDeclarations),
         } as AbstractionExpression;
     }
 
-    const functionType = typeCheck(expression.function, declarations, id);
+    const functionType = typeCheck(expression.function, declarations);
 
     if (!isAbstractionExpression(functionType)) {
         throw new Error("Cannot apply non-function type");
     }
 
+    const reductions: { name: symbol; value: Expression }[] = [];
     for (const [index, declaration] of functionType.variables.entries()) {
         const argument = expression.arguments[index];
 
-        const argType = typeCheck(argument, declarations, id);
+        const argType = typeCheck(argument, declarations);
 
-        if (!expressionCongruent(argType, declaration.type, id)) {
+        if (!expressionCongruent(argType, declaration.type)) {
             throw new Error(`Type mismatch on application.`);
         }
+
+        reductions.push({ name: declaration.name, value: argument });
     }
 
-    const betaReducedExpression = expression.arguments.reduce(
-        (functionExpression, argument, index) => {
-            const declaration = functionType.variables[index];
-
-            return betaReduce(functionExpression, declaration.name, argument);
-        },
-        functionType
-    );
-
-    return betaReducedExpression;
+    return betaReduce(functionType, ...reductions);
 };
