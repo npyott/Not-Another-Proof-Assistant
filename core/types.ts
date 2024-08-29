@@ -163,6 +163,19 @@ export const expressionCongruent = (
     return false;
 };
 
+const typeChain = (
+    expression: Expression,
+    declarations: Declaration[]
+): Expression[] => {
+    const expressionType = typeCheck(expression, declarations);
+
+    if (expressionType === Type) {
+        return [expression, Type];
+    }
+
+    return [expression, ...typeChain(expressionType, declarations)];
+};
+
 // TODO: Use sub-errors to make descriptive chain
 export const typeCheck = (
     expression: Expression,
@@ -184,18 +197,22 @@ export const typeCheck = (
 
     if (isAbstractionExpression(expression)) {
         const existingNames = new Set(declarations.map(({ name }) => name));
+        const newDeclarations = [...declarations];
 
-        const newDeclarations = declarations.concat(
-            ...expression.variables.map((declaration) => {
-                if (existingNames.has(declaration.name)) {
-                    throw new Error(
-                        "Duplicate name found: " + declaration.name.toString()
-                    );
-                }
+        for (const declaration of expression.variables) {
+            if (existingNames.has(declaration.name)) {
+                throw new Error(
+                    "Duplicate name found: " + declaration.name.toString()
+                );
+            }
 
-                return declaration;
-            })
-        );
+            // Declarations should be valid types as well
+            if (declaration.type !== Type) {
+                typeCheck(declaration.type, newDeclarations);
+            }
+
+            newDeclarations.push(declaration);
+        }
 
         return {
             expressionType: "abstraction",
@@ -214,9 +231,14 @@ export const typeCheck = (
     for (const [index, declaration] of functionType.variables.entries()) {
         const argument = expression.arguments[index];
 
-        const argType = typeCheck(argument, declarations);
-
-        if (!expressionCongruent(argType, declaration.type)) {
+        // Allow direct sub-typing
+        // i.e. type literals, anything is of type Type, etc.
+        const argTypeChain = typeChain(argument, declarations);
+        if (
+            !argTypeChain.some((type) =>
+                expressionCongruent(type, declaration.type)
+            )
+        ) {
             throw new Error(`Type mismatch on application.`);
         }
 
@@ -225,3 +247,5 @@ export const typeCheck = (
 
     return betaReduce(functionType, ...reductions);
 };
+
+export const Type = Symbol("Type");

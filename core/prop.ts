@@ -3,6 +3,7 @@ import {
     ApplicationExpression,
     AbstractionExpression,
     betaReduce,
+    Type,
 } from "./types.ts";
 import {
     apply,
@@ -10,34 +11,25 @@ import {
     makeAbstraction,
 } from "./utilities.ts";
 
-export const PropUniverse = Symbol("PropUniverse");
 export const Prop = Symbol("Prop");
 
 export const False = Symbol("False");
 export const FalseImpliesAll = Symbol("False => Any");
-export const NotSymbol = Symbol("Not");
-export const Not = (P: Expression): ApplicationExpression => ({
-    expressionType: "application",
-    function: NotSymbol,
-    arguments: [P],
-});
+export const Not = Symbol("Not");
+export const not = (P: Expression): ApplicationExpression => apply(Not, P);
 export const NotImplication = Symbol("Not Implication");
 export const NotFormation = Symbol("Not Formation");
 
-export const AndSymbol = Symbol("And");
-export const And = (P: Expression, Q: Expression): ApplicationExpression => ({
-    expressionType: "application",
-    function: AndSymbol,
-    arguments: [P, Q],
-});
+export const And = Symbol("And");
+export const and = (P: Expression, Q: Expression) => apply(And, P, Q);
 export const AndLeft = Symbol("Left");
 export const AndRight = Symbol("Right");
 export const AndFormation = Symbol("And Formation");
 
-export const OrSymbol = Symbol("Or");
-export const Or = (P: Expression, Q: Expression): ApplicationExpression => ({
+export const Or = Symbol("Or");
+export const or = (P: Expression, Q: Expression): ApplicationExpression => ({
     expressionType: "application",
-    function: OrSymbol,
+    function: Or,
     arguments: [P, Q],
 });
 export const ApplyOrLeft = Symbol("Or Left");
@@ -48,8 +40,11 @@ export const OrFormationRight = Symbol("Or Formation From Right");
 
 export const ExcludedMiddle = Symbol("Excluded Middle");
 
-export const iff = (P: Expression, Q: Expression) =>
-    And(implication(P, Q), implication(Q, P));
+export const Iff = Symbol("<=>");
+export const iff = (P: Expression, Q: Expression) => apply(Iff, P, Q);
+export const IffFormation = Symbol("IffFormation");
+export const IffDefinition = Symbol("IffDefinition");
+export const IffRewrite = Symbol("rewrite");
 
 export const forAllPropositions = (
     body: (...symbol: symbol[]) => Expression
@@ -76,22 +71,26 @@ export const implication = (
 const PropSymbolicDeclarations = [
     {
         name: Prop,
-        type: PropUniverse,
+        type: Type,
     },
     {
         name: False,
         type: Prop,
     },
     {
-        name: NotSymbol,
+        name: Not,
         type: independentFunctionType(Prop, Prop),
     },
     {
-        name: AndSymbol,
+        name: And,
         type: independentFunctionType([Prop, Prop], Prop),
     },
     {
-        name: OrSymbol,
+        name: Or,
+        type: independentFunctionType([Prop, Prop], Prop),
+    },
+    {
+        name: Iff,
         type: independentFunctionType([Prop, Prop], Prop),
     },
 ] as const;
@@ -104,54 +103,75 @@ const PropAxiomaticDeclarations = [
     {
         name: NotImplication,
         type: forAllPropositions((P) =>
-            implication(Not(P), implication(P, False))
+            implication(not(P), implication(P, False))
         ),
     },
     {
         name: NotFormation,
         type: forAllPropositions((P) =>
-            implication(implication(P, False), Not(P))
+            implication(implication(P, False), not(P))
         ),
     },
     {
         name: AndLeft,
-        type: forAllPropositions((P, Q) => implication(And(P, Q), P)),
+        type: forAllPropositions((P, Q) => implication(and(P, Q), P)),
     },
     {
         name: AndRight,
-        type: forAllPropositions((P, Q) => implication(And(P, Q), Q)),
+        type: forAllPropositions((P, Q) => implication(and(P, Q), Q)),
     },
     {
         name: AndFormation,
-        type: forAllPropositions((P, Q) => implication([P, Q], And(P, Q))),
+        type: forAllPropositions((P, Q) => implication([P, Q], and(P, Q))),
     },
     {
         name: ApplyOrLeft,
         type: forAllPropositions((P, Q, R) =>
-            implication([Or(P, Q), implication(P, R)], Or(R, Q))
+            implication([or(P, Q), implication(P, R)], or(R, Q))
         ),
     },
     {
         name: ApplyOrRight,
         type: forAllPropositions((P, Q, R) =>
-            implication([Or(P, Q), implication(Q, R)], Or(P, R))
+            implication([or(P, Q), implication(Q, R)], or(P, R))
         ),
     },
     {
         name: ConcludeFromOr,
-        type: forAllPropositions((P) => implication(Or(P, P), P)),
+        type: forAllPropositions((P) => implication(or(P, P), P)),
     },
     {
         name: OrFormationLeft,
-        type: forAllPropositions((P, Q) => implication(P, Or(P, Q))),
+        type: forAllPropositions((P, Q) => implication(P, or(P, Q))),
     },
     {
         name: OrFormationRight,
-        type: forAllPropositions((P, Q) => implication(Q, Or(P, Q))),
+        type: forAllPropositions((P, Q) => implication(Q, or(P, Q))),
     },
     {
         name: ExcludedMiddle,
-        type: forAllPropositions((P) => Or(P, Not(P))),
+        type: forAllPropositions((P) => or(P, not(P))),
+    },
+    {
+        name: IffFormation,
+        type: forAllPropositions((P, Q) =>
+            implication(and(implication(P, Q), implication(Q, P)), iff(P, Q))
+        ),
+    },
+    {
+        name: IffDefinition,
+        type: forAllPropositions((P, Q) =>
+            implication(iff(P, Q), and(implication(P, Q), implication(Q, P)))
+        ),
+    },
+    {
+        name: IffRewrite,
+        type: forAllPropositions((P, Q) =>
+            makeAbstraction(
+                [Symbol("R"), independentFunctionType(Prop, Prop)],
+                (R) => implication(iff(P, Q), iff(apply(R, P), apply(R, Q)))
+            )
+        ),
     },
 ] as const;
 

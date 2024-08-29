@@ -5,7 +5,7 @@ import {
     ApplyOrLeft,
     ApplyOrRight,
     ConcludeFromOr,
-    Or,
+    or,
     OrFormationLeft,
     OrFormationRight,
     Prop,
@@ -34,14 +34,14 @@ console.log(
                 [
                     Symbol("Theorem 1"),
                     forAllPropositions((P, Q) =>
-                        implication(Or(P, Q), Or(Q, P))
+                        implication(or(P, Q), or(Q, P))
                     ),
                 ],
                 (_thm1) => Prop
             ),
             arguments: [
                 forAllPropositions((P, Q) =>
-                    makeAbstraction([Symbol("h1"), Or(P, Q)], (h1) =>
+                    makeAbstraction([Symbol("h1"), or(P, Q)], (h1) =>
                         usePropAxioms(
                             [
                                 {
@@ -54,15 +54,15 @@ console.log(
                                 },
                                 {
                                     name: ApplyOrLeft,
-                                    reductions: [P, Q, Or(Q, P)],
+                                    reductions: [P, Q, or(Q, P)],
                                 },
                                 {
                                     name: ApplyOrRight,
-                                    reductions: [Or(Q, P), Q, Or(Q, P)],
+                                    reductions: [or(Q, P), Q, or(Q, P)],
                                 },
                                 {
                                     name: ConcludeFromOr,
-                                    reductions: [Or(Q, P)],
+                                    reductions: [or(Q, P)],
                                 },
                             ],
                             /**
